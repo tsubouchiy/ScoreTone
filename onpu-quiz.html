@@ -1,3 +1,13 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="おんぷクイズ">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
 <title>おんぷクイズ</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -165,6 +175,16 @@ details.addbox[open] summary b::after{content:" ▾"}
   font-size:3rem;font-weight:900;animation:wiggle 1.4s ease-in-out infinite}
 @keyframes wiggle{0%,80%,100%{transform:rotate(0)}85%{transform:rotate(-4deg)}90%{transform:rotate(4deg)}95%{transform:rotate(-2deg)}}
 .newtag{color:var(--gold);font-weight:900;font-size:1.1rem;min-height:1.5em;margin:0}
+.ring{position:fixed;inset:0;pointer-events:none;z-index:40}
+.ring svg{position:absolute;inset:0;width:100%;height:100%}
+.ring path{fill:none;stroke-linecap:round}
+.ring .track{stroke:var(--line);stroke-width:4;opacity:.6}
+.ring .trail{stroke:var(--accent);stroke-width:6;transition:stroke .3s}
+.ring.hurry .trail{stroke:var(--ng)}
+.ring .runner{position:absolute;left:0;top:0;width:40px;height:40px;border-radius:50%;background:var(--accent);color:#fff;
+  display:grid;place-items:center;font-size:1.4rem;font-weight:900;box-shadow:0 2px 8px rgba(0,0,0,.2);will-change:transform}
+.ring.hurry .runner{background:var(--ng)}
+.safe-probe{position:fixed;visibility:hidden;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
 .confetti{position:fixed;pointer-events:none;width:8px;height:12px;border-radius:2px;z-index:50;animation:fly .8s ease-out forwards}
 @keyframes fly{to{transform:translate(var(--dx),var(--dy)) rotate(var(--r));opacity:0}}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
@@ -178,7 +198,7 @@ const SEMI=[0,2,4,5,7,9,11];
 // diatonic number: octave*7 + letter (C4 = 28)
 const nm=d=>NAMES[((d%7)+7)%7];
 const LEVELS={
-  easy:{label:"やさしい",grade:"小学校 低学年",badge:"易",desc:"ト音記号　まん中のド〜上のド",c:"--easy",clefs:"treble"},
+  easy:{label:"やさしい",grade:"小学校 低学年",badge:"易",desc:"ト音記号　まん中のド〜上のド　1もん 6びょう",limit:6,c:"--easy",clefs:"treble"},
   mid:{label:"ふつう",grade:"小学校 高学年",badge:"中",desc:"ト音記号とヘ音記号　低いド〜高いド　♯♭あり",c:"--mid",clefs:"grand"},
   hard:{label:"むずかしい",grade:"チャレンジ",badge:"難",desc:"ヘ音記号の和音　下のラ〜上のミ",c:"--hard",clefs:"bass"},
   oni:{label:"おにムズ",grade:"上級チャレンジ",badge:"鬼",desc:"ヘ音記号の和音　低いド〜上のソ　♯♭あり",c:"--oni",clefs:"bass"}
@@ -528,6 +548,7 @@ function confetti(el){
 function setAccent(level){document.documentElement.style.setProperty("--accent",level?`var(${LEVELS[level].c})`:"var(--mid)")}
 
 function home(){
+  stopTimer();
   st=null;setAccent(null);
   const me=cur();if(!me)return players();
   const owned=getOwned(),have=CARDS.filter(c=>owned[c.id]);
@@ -558,6 +579,7 @@ function home(){
 const esc=t=>String(t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
 function start0(){getPlayers().length>1?players():home()}
 function players(){
+  stopTimer();
   st=null;setAccent(null);
   const ps=getPlayers();let icon=PICONS.find(i=>!ps.some(p=>p.icon===i))||PICONS[0];
   const cardsOf=id=>{try{return Object.keys(JSON.parse(store.get("onpu-p-"+id+"-cards")||"{}")).length}catch(e){return 0}};
@@ -663,6 +685,7 @@ async function readCode(text){
 const starsFor=s=>s===TOTAL?3:s>=7?2:s>=4?1:0;
 
 function zukan(){
+  stopTimer();
   setAccent(null);
   const owned=getOwned(),have=CARDS.filter(c=>owned[c.id]).length;
   const sec=(r,t)=>`<h3>${t}</h3>`+CARDS.filter(c=>c.r===r).map(c=>owned[c.id]?cardHTML(c,owned[c.id]):`<div class="card unk r${c.r}"><div class="a">？</div><div class="rs">${RLABEL[c.r]}</div></div>`).join("");
@@ -697,6 +720,7 @@ function barsHTML(popIdx){
     return `<i class="${cls}${k===popIdx?" pop":""}" style="--h:${h}px"></i>`}).join("");
 }
 function render(){
+  stopTimer();
   const L=LEVELS[st.level],q=st.q;
   app.innerHTML=`
     <div class="top"><button class="back" id="back">← もどる</button><span class="tag">${cur()?cur().icon+" ":""}${L.badge}　${L.label}</span></div>
@@ -708,9 +732,10 @@ function render(){
     <div class="fb" id="fb"></div>`;
   document.getElementById("back").onclick=home;
   app.querySelectorAll(".opt").forEach(b=>b.onclick=()=>answer(b));
+  if(LEVELS[st.level].limit)startTimer(LEVELS[st.level].limit);
 }
 function answer(btn){
-  if(st.done)return;st.done=true;
+  if(st.done)return;st.done=true;stopTimer();
   const q=st.q,ok=btn.dataset.o===q.answer;
   app.querySelectorAll(".opt").forEach(b=>{b.disabled=true;if(b.dataset.o===q.answer)b.classList.add("right")});
   if(!ok)btn.classList.add("wrong");
@@ -728,7 +753,61 @@ function answer(btn){
   const nx=document.getElementById("nx");nx.focus();
   nx.onclick=()=>{if(last)result();else{st.i++;next()}};
 }
+function timeUp(){
+  if(!st||st.done)return;st.done=true;stopTimer();
+  const q=st.q;
+  app.querySelectorAll(".opt").forEach(b=>{b.disabled=true;if(b.dataset.o===q.answer)b.classList.add("right")});
+  st.combo=0;st.res.push({ok:false,answer:q.answer,chose:"じかんぎれ"});
+  document.getElementById("bars").innerHTML=barsHTML(-1);
+  play(q.notes);
+  const last=st.i===TOTAL-1;
+  document.getElementById("fb").innerHTML=`<p class="ng">じかんぎれ！ こたえは「${q.answer}」</p>`;
+  const lvl=st.level,i=st.i;
+  st.autoNext=setTimeout(()=>{if(!st||st.level!==lvl||st.i!==i)return;if(last)result();else{st.i++;next()}},1800);
+}
+/* ---------- time limit: a note runs once around the edge of the screen ---------- */
+let tm=null;
+function stopTimer(){
+  if(st&&st.autoNext){clearTimeout(st.autoNext);st.autoNext=null}
+  if(!tm)return;cancelAnimationFrame(tm.raf);removeEventListener("resize",tm.onResize);
+  document.removeEventListener("visibilitychange",tm.onVis);tm.el.remove();tm=null;
+}
+function startTimer(sec){
+  stopTimer();
+  const el=document.createElement("div");el.className="ring";el.setAttribute("aria-hidden","true");
+  el.innerHTML=`<svg><path class="track"/><path class="trail"/></svg><span class="runner">♪</span>`;
+  document.body.appendChild(el);
+  const svg=el.querySelector("svg"),track=el.querySelector(".track"),trail=el.querySelector(".trail"),runner=el.querySelector(".runner");
+  const probe=document.createElement("div");probe.className="safe-probe";document.body.appendChild(probe);
+  let len=0;
+  function layout(){
+    const cs=getComputedStyle(probe),W=innerWidth,H=innerHeight;
+    const t=parseFloat(cs.paddingTop)+14,r=parseFloat(cs.paddingRight)+14,b=parseFloat(cs.paddingBottom)+14,l=parseFloat(cs.paddingLeft)+14;
+    const R=22,cx=W/2;
+    // start at top-centre and go clockwise
+    const d=`M${cx} ${t} H${W-r-R} Q${W-r} ${t} ${W-r} ${t+R} V${H-b-R} Q${W-r} ${H-b} ${W-r-R} ${H-b} H${l+R} Q${l} ${H-b} ${l} ${H-b-R} V${t+R} Q${l} ${t} ${l+R} ${t} Z`;
+    svg.setAttribute("viewBox",`0 0 ${W} ${H}`);track.setAttribute("d",d);trail.setAttribute("d",d);
+    len=trail.getTotalLength();trail.style.strokeDasharray=len;
+  }
+  layout();probe.remove();
+  const T=sec*1000;let start=performance.now(),paused=0,pausedAt=0;
+  function layout2(){document.body.appendChild(probe);layout();probe.remove()}
+  const onVis=()=>{if(document.hidden)pausedAt=performance.now();else if(pausedAt){paused+=performance.now()-pausedAt;pausedAt=0}};
+  function frame(now){
+    if(pausedAt){tm.raf=requestAnimationFrame(frame);return}
+    const f=Math.min(1,(now-start-paused)/T);
+    trail.style.strokeDashoffset=len*(1-f);
+    const pt=trail.getPointAtLength(len*f);
+    runner.style.transform=`translate(${pt.x}px,${pt.y}px) translate(-50%,-50%) rotate(${f*720}deg)`;
+    el.classList.toggle("hurry",f>2/3);
+    if(f>=1){timeUp();return}
+    tm.raf=requestAnimationFrame(frame);
+  }
+  tm={el,raf:requestAnimationFrame(frame),onResize:layout2,onVis};
+  addEventListener("resize",layout2);document.addEventListener("visibilitychange",onVis);
+}
 function result(){
+  stopTimer();
   const L=LEVELS[st.level],s=st.score;
   const key=pk("best-"+st.level),b=+(store.get(key)??-1);
   const isBest=s>b;if(isBest)store.set(key,s);
@@ -788,3 +867,6 @@ document.addEventListener("keydown",e=>{
   });
 })();
 </script>
+
+</body>
+</html>
